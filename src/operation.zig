@@ -147,23 +147,23 @@ pub const Operation = union(OperationTag) {
     // ========== SCHEMA/METADATA OPERATIONS (Non-Document Entities) ==========
     // Tag 100: Create schema entities (Space, Store, Index, User, Backup - NOT Document)
     Create: struct {
-        doc_type: DocType,      // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
-        ns: []const u8,         // "space" | "space.store" | "space.store.index" | username | backup_name
-        payload: []const u8,    // JSON/CBOR data
-        auto_create: bool,      // Auto-provision parents if missing
-        metadata: ?[]const u8,  // Optional metadata (description, etc.)
+        doc_type: DocType, // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
+        ns: []const u8, // "space" | "space.store" | "space.store.index" | username | backup_name
+        payload: []const u8, // JSON/CBOR data
+        auto_create: bool, // Auto-provision parents if missing
+        metadata: ?[]const u8, // Optional metadata (description, etc.)
     },
 
     // Tag 101: Drop schema entities (Space, Store, Index, User, Backup - NOT Document)
     Drop: struct {
-        doc_type: DocType,      // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
-        name: []const u8,       // Entity name or namespace
+        doc_type: DocType, // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
+        name: []const u8, // Entity name or namespace
     },
 
     // Tag 102: List schema entities with pagination (Space, Store, Index, User, Backup - NOT Document)
     List: struct {
-        doc_type: DocType,      // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
-        ns: ?[]const u8,        // Optional namespace filter
+        doc_type: DocType, // 1=Space, 2=Store, 3=Index, 5=User, 6=Backup (NOT 4=Document)
+        ns: ?[]const u8, // Optional namespace filter
         limit: ?u32,
         offset: ?u32,
     },
@@ -171,34 +171,34 @@ pub const Operation = union(OperationTag) {
     // ========== DOCUMENT DATA OPERATIONS ==========
     // Tag 103: Insert single document
     Insert: struct {
-        store_ns: []const u8,   // "space.store"
-        payload: []const u8,    // CBOR encoded document
-        auto_create: bool,      // Auto-provision space/store if missing
+        store_ns: []const u8, // "space.store"
+        payload: []const u8, // CBOR encoded document
+        auto_create: bool, // Auto-provision space/store if missing
     },
 
     // Tag 104: Insert multiple documents (batch)
     BatchInsert: struct {
         store_ns: []const u8,
-        values: [][]const u8,   // Array of document values (CBOR encoded)
+        values: [][]const u8, // Array of document values (CBOR encoded)
     },
 
     // Tag 105: Read document by ID
     Read: struct {
         store_ns: []const u8,
-        id: u128,               // Document ID
+        id: u128, // Document ID
     },
 
     // Tag 106: Update document
     Update: struct {
         store_ns: []const u8,
-        id: u128,               // Document ID
-        payload: []const u8,    // New CBOR data
+        id: u128, // Document ID
+        payload: []const u8, // New CBOR data
     },
 
     // Tag 107: Delete document(s)
     Delete: struct {
         store_ns: []const u8,
-        id: ?u128,              // Optional - if null, uses query filters
+        id: ?u128, // Optional - if null, uses query filters
     },
 
     // ========== QUERY OPERATIONS ==========
@@ -211,13 +211,13 @@ pub const Operation = union(OperationTag) {
 
     // Tag 109: Query documents with filter/sort/limit
     Query: struct {
-        store_ns: []const u8,   // Store namespace
+        store_ns: []const u8, // Store namespace
         query_json: []const u8,
     },
 
     // Tag 110: Aggregate documents
     Aggregate: struct {
-        store_ns: []const u8,   // Store namespace
+        store_ns: []const u8, // Store namespace
         aggregate_json: []const u8,
     },
 
@@ -267,7 +267,7 @@ pub const Operation = union(OperationTag) {
     // Tag 118: Batch reply from server
     BatchReply: struct {
         status: Status,
-        results: [][]const u8,  // Array of results (keys or error messages)
+        results: [][]const u8, // Array of results (keys or error messages)
     },
 
     // Tag 119: Flush data to disk
@@ -278,10 +278,10 @@ pub const Operation = union(OperationTag) {
 
     // Tag 121: Scan documents (range read with limit/offset)
     Scan: struct {
-        store_ns: []const u8,   // Store namespace
-        start_key: ?u128,       // Optional starting key (null = from beginning)
-        limit: u32,             // Number of records to return
-        skip: u32,              // Number of records to skip
+        store_ns: []const u8, // Store namespace
+        start_key: ?u128, // Optional starting key (null = from beginning)
+        limit: u32, // Number of records to return
+        skip: u32, // Number of records to skip
     },
 };
 
@@ -316,7 +316,7 @@ pub const Space = struct {
 
 pub const Store = struct {
     id: u16,
-    store_id: u16,  // Embedded in keys to route to correct indexes
+    store_id: u16, // Embedded in keys to route to correct indexes
     ns: []const u8,
     description: ?[]const u8 = null,
     created_at: i64 = 0,
@@ -324,7 +324,7 @@ pub const Store = struct {
 
 pub const Index = struct {
     id: u16,
-    store_id: u16,  // Which store this index belongs to
+    store_id: u16, // Which store this index belongs to
     ns: []const u8,
     field: []const u8,
     field_type: FieldType,
@@ -336,6 +336,12 @@ pub const Index = struct {
 pub const StoreInfo = struct {
     store: Store,
     indexes: []Index,
+};
+
+const VLog = struct {
+    id: u16,
+    file_name: []u8,
+    created_at: i64,
 };
 
 pub const User = struct {

@@ -199,6 +199,7 @@ pub const Operation = union(OperationTag) {
     Delete: struct {
         store_ns: []const u8,
         id: ?u128, // Optional - if null, uses query filters
+        query_json: ?[]const u8, // Optional - filter JSON for query-based delete
     },
 
     // ========== QUERY OPERATIONS ==========

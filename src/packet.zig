@@ -53,6 +53,10 @@ pub const Packet = struct {
                 if (data.id) |_| {
                     size += 16; // id (u128)
                 }
+                size += 1; // has_query_json (u8)
+                if (data.query_json) |qj| {
+                    size += 4 + @as(u32, @intCast(qj.len)); // query_json string
+                }
             },
             .List => |data| {
                 size += 1; // doc_type (u8)
@@ -338,6 +342,12 @@ pub const Packet = struct {
                 } else {
                     writer.writeInt(u8, 0);
                 }
+                if (data.query_json) |qj| {
+                    writer.writeInt(u8, 1);
+                    writer.writeString(qj);
+                } else {
+                    writer.writeInt(u8, 0);
+                }
             },
             // ========== QUERY OPERATIONS ==========
             .Range => |data| {
@@ -533,7 +543,7 @@ pub const Packet = struct {
                     .payload = payload,
                     .auto_create = auto_create,
                     .metadata = metadata,
-                }};
+                } };
             },
             // Tag 101: Drop
             101 => {
@@ -544,7 +554,7 @@ pub const Packet = struct {
                 return Operation{ .Drop = .{
                     .doc_type = doc_type,
                     .name = name,
-                }};
+                } };
             },
             // Tag 102: List
             102 => {
@@ -574,7 +584,7 @@ pub const Packet = struct {
                     .ns = ns,
                     .limit = limit,
                     .offset = offset_val,
-                }};
+                } };
             },
             // Tag 103: Insert
             103 => {
@@ -586,7 +596,7 @@ pub const Packet = struct {
                     .store_ns = store_ns,
                     .payload = payload,
                     .auto_create = auto_create,
-                }};
+                } };
             },
             // Tag 104: BatchInsert
             104 => {
@@ -600,7 +610,7 @@ pub const Packet = struct {
                 return Operation{ .BatchInsert = .{
                     .store_ns = store_ns,
                     .values = values,
-                }};
+                } };
             },
             // Tag 105: Read
             105 => {
@@ -610,7 +620,7 @@ pub const Packet = struct {
                 return Operation{ .Read = .{
                     .store_ns = store_ns,
                     .id = id,
-                }};
+                } };
             },
             // Tag 106: Update
             106 => {
@@ -622,7 +632,7 @@ pub const Packet = struct {
                     .store_ns = store_ns,
                     .id = id,
                     .payload = payload,
-                }};
+                } };
             },
             // Tag 107: Delete
             107 => {
@@ -634,10 +644,17 @@ pub const Packet = struct {
                 else
                     null;
 
+                const has_query_json = try Packet.readBytes(data, offset, u8);
+                const query_json = if (has_query_json == 1)
+                    try Packet.readString(allocator, data, offset)
+                else
+                    null;
+
                 return Operation{ .Delete = .{
                     .store_ns = store_ns,
                     .id = id,
-                }};
+                    .query_json = query_json,
+                } };
             },
             // Tag 108: Range
             108 => {
@@ -649,7 +666,7 @@ pub const Packet = struct {
                     .store_ns = store_ns,
                     .start_key = start_key,
                     .end_key = end_key,
-                }};
+                } };
             },
             // Tag 109: Query
             109 => {
@@ -659,7 +676,7 @@ pub const Packet = struct {
                 return Operation{ .Query = .{
                     .store_ns = store_ns,
                     .query_json = query_json,
-                }};
+                } };
             },
             // Tag 110: Aggregate
             110 => {
@@ -669,7 +686,7 @@ pub const Packet = struct {
                 return Operation{ .Aggregate = .{
                     .store_ns = store_ns,
                     .aggregate_json = aggregate_json,
-                }};
+                } };
             },
             // Tag 111: Authenticate
             111 => {
@@ -679,7 +696,7 @@ pub const Packet = struct {
                 return Operation{ .Authenticate = .{
                     .username = username,
                     .password = password,
-                }};
+                } };
             },
             // Tag 112: AuthenticateApiKey
             112 => {
@@ -687,7 +704,7 @@ pub const Packet = struct {
 
                 return Operation{ .AuthenticateApiKey = .{
                     .api_key = api_key,
-                }};
+                } };
             },
             // Tag 113: Logout
             113 => Operation.Logout,
@@ -701,7 +718,7 @@ pub const Packet = struct {
                     .username = username,
                     .old_password = old_password,
                     .new_password = new_password,
-                }};
+                } };
             },
             // Tag 115: Restore
             115 => {
@@ -711,7 +728,7 @@ pub const Packet = struct {
                 return Operation{ .Restore = .{
                     .backup_path = backup_path,
                     .target_path = target_path,
-                }};
+                } };
             },
             // Tag 116: CleanBackups
             116 => {
@@ -721,7 +738,7 @@ pub const Packet = struct {
                 return Operation{ .CleanBackups = .{
                     .backup_dir = backup_dir,
                     .keep_count = keep_count,
-                }};
+                } };
             },
             // Tag 117: Reply
             117 => {
@@ -733,7 +750,7 @@ pub const Packet = struct {
                 return Operation{ .Reply = .{
                     .status = status,
                     .data = reply_data,
-                }};
+                } };
             },
             // Tag 118: BatchReply
             118 => {
@@ -748,7 +765,7 @@ pub const Packet = struct {
                 return Operation{ .BatchReply = .{
                     .status = status,
                     .results = results,
-                }};
+                } };
             },
             // Tag 119: Flush
             119 => Operation.Flush,
@@ -772,7 +789,7 @@ pub const Packet = struct {
                     .start_key = start_key,
                     .limit = limit,
                     .skip = skip,
-                }};
+                } };
             },
             else => SerializationError.InvalidData,
         };
@@ -1333,4 +1350,3 @@ test "attribute name does not match index field for all attribute types" {
     }
     try expect(!any_match);
 }
-

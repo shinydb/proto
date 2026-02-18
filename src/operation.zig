@@ -117,6 +117,16 @@ pub const Attribute = union(enum) {
     }
 };
 
+
+pub const StatsTag = enum(u8) {
+    WalStats = 1,
+    DbStats = 2,
+    IndexStats = 3,
+    VLogStats = 4,
+    GcStats = 5,
+    AllStats = 255,
+};
+
 // Explicit operation tags to ensure correct wire protocol values
 pub const OperationTag = enum(u8) {
     Create = 100,
@@ -141,6 +151,8 @@ pub const OperationTag = enum(u8) {
     Flush = 119,
     Shutdown = 120,
     Scan = 121,
+    Stats = 122,
+    Collect = 123,
 };
 
 pub const Operation = union(OperationTag) {
@@ -283,6 +295,14 @@ pub const Operation = union(OperationTag) {
         start_key: ?u128, // Optional starting key (null = from beginning)
         limit: u32, // Number of records to return
         skip: u32, // Number of records to skip
+    },
+
+    Stats: struct {
+        stat: StatsTag
+    },
+    
+    Collect: struct {
+        vlog: u8
     },
 };
 

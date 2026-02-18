@@ -4,6 +4,7 @@ const Operation = @import("operation.zig").Operation;
 const Status = @import("operation.zig").Status;
 const ValueType = @import("operation.zig").ValueType;
 const Attribute = @import("operation.zig").Attribute;
+const StatsTag = @import("operation.zig").StatsTag;
 const DocType = @import("operation.zig").DocType;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
@@ -148,6 +149,12 @@ pub const Packet = struct {
             },
             .Flush => {},
             .Shutdown => {},
+            .Stats => {
+                size += 1; // stat tag (u8)
+            },
+            .Collect => {
+                size += 1; // vlog (u8)
+            },
         }
         return size;
     }
@@ -193,6 +200,7 @@ pub const Packet = struct {
             .ResetPassword => {},
             .Restore, .CleanBackups => {},
             .Reply, .Flush, .Shutdown => {},
+            .Stats, .Collect => {},
             // BatchInsert and BatchReply have arrays that need freeing
             .BatchInsert => |data| {
                 allocator.free(data.values);
@@ -420,6 +428,13 @@ pub const Packet = struct {
             },
             .Flush => {},
             .Shutdown => {},
+            // ========== ADMIN OPERATIONS ==========
+            .Stats => |data| {
+                writer.writeInt(u8, @intFromEnum(data.stat));
+            },
+            .Collect => |data| {
+                writer.writeInt(u8, data.vlog);
+            },
         }
     }
 
@@ -790,6 +805,17 @@ pub const Packet = struct {
                     .limit = limit,
                     .skip = skip,
                 } };
+            },
+            // Tag 122: Stats
+            122 => {
+                const stat_byte = try Packet.readBytes(data, offset, u8);
+                const stat = @as(StatsTag, @enumFromInt(stat_byte));
+                return Operation{ .Stats = .{ .stat = stat } };
+            },
+            // Tag 123: Collect
+            123 => {
+                const vlog = try Packet.readBytes(data, offset, u8);
+                return Operation{ .Collect = .{ .vlog = vlog } };
             },
             else => SerializationError.InvalidData,
         };

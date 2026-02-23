@@ -117,7 +117,6 @@ pub const Attribute = union(enum) {
     }
 };
 
-
 pub const StatsTag = enum(u8) {
     WalStats = 1,
     DbStats = 2,
@@ -141,7 +140,7 @@ pub const OperationTag = enum(u8) {
     Query = 109,
     Aggregate = 110,
     Authenticate = 111,
-    AuthenticateApiKey = 112,
+    ShipWal = 112,
     Logout = 113,
     ResetPassword = 114,
     Restore = 115,
@@ -153,6 +152,8 @@ pub const OperationTag = enum(u8) {
     Scan = 121,
     Stats = 122,
     Collect = 123,
+    Vlogs = 124,
+    SetMode = 125,
 };
 
 pub const Operation = union(OperationTag) {
@@ -241,9 +242,14 @@ pub const Operation = union(OperationTag) {
         password: []const u8,
     },
 
-    // Tag 112: Authenticate with API key
-    AuthenticateApiKey: struct {
-        api_key: []const u8,
+    // Tag 112: Ship WAL record to sibling (server-to-server replication only)
+    ShipWal: struct {
+        op_kind: u8, // 0=insert, 1=update, 2=delete (OpKind ordinal)
+        store_ns: []const u8, // "space.store"
+        lsn: u64,
+        doc_id: u128, // original document key
+        timestamp: i64, // original write timestamp from primary
+        data: []const u8, // CBOR payload; empty slice for delete
     },
 
     // Tag 113: Logout/revoke session
@@ -297,12 +303,14 @@ pub const Operation = union(OperationTag) {
         skip: u32, // Number of records to skip
     },
 
-    Stats: struct {
-        stat: StatsTag
-    },
-    
-    Collect: struct {
-        vlog: u8
+    Stats: struct { stat: StatsTag },
+
+    Collect: struct { vlog: u8 },
+    Vlogs: void,
+
+    // Tag 125: Set server operation mode (admin only)
+    SetMode: struct {
+        online: bool, // true = online (normal), false = offline (admin-only)
     },
 };
 

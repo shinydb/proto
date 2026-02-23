@@ -9,6 +9,7 @@ pub const Index = @import("operation.zig").Index;
 pub const User = @import("operation.zig").User;
 pub const Backup = @import("operation.zig").Backup;
 pub const DocType = @import("operation.zig").DocType;
+pub const StatsTag = @import("operation.zig").StatsTag;
 pub const FieldType = @import("operation.zig").FieldType;
 pub const ValueType = @import("operation.zig").ValueType;
 pub const parseNamespace = @import("operation.zig").parseNamespace;

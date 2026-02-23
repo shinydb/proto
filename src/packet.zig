@@ -13,9 +13,8 @@ pub const Packet = struct {
     checksum: u64,
     packet_length: u32,
     packet_id: u32,
-    session_id: u32,
-    correlation_id: u64,
     timestamp: i64,
+    // auth_token: [32]u8,
     op: Operation,
 
     fn calcMsgSize(pck: *const Packet) usize {
@@ -23,9 +22,8 @@ pub const Packet = struct {
         size += @sizeOf(u64); // checksum
         size += @sizeOf(u32); // packet_length
         size += @sizeOf(u32); // packet_id
-        size += @sizeOf(u32); // session_id
-        size += @sizeOf(u64); // correlation_id
         size += @sizeOf(i64); // timestamp
+        // size += 32; // auth_token
         size += 1; // op tag (u8)
         // Add operation-specific size
         switch (pck.op) {
@@ -116,8 +114,12 @@ pub const Packet = struct {
                 size += 4 + @as(u32, @intCast(data.username.len)); // username string
                 size += 4 + @as(u32, @intCast(data.password.len)); // password string
             },
-            .AuthenticateApiKey => |data| {
-                size += 4 + @as(u32, @intCast(data.api_key.len)); // api_key string
+            .ShipWal => |data| {
+                size += 1; // op_kind (u8)
+                size += 4 + @as(u32, @intCast(data.store_ns.len)); // store_ns string
+                size += 16; // doc_id (u128)
+                size += 8; // timestamp (i64)
+                size += 4 + @as(u32, @intCast(data.data.len)); // data bytes
             },
             .Logout => {},
             .ResetPassword => |data| {
@@ -149,11 +151,15 @@ pub const Packet = struct {
             },
             .Flush => {},
             .Shutdown => {},
+            .Vlogs => {},
             .Stats => {
                 size += 1; // stat tag (u8)
             },
             .Collect => {
                 size += 1; // vlog (u8)
+            },
+            .SetMode => {
+                size += 1; // online (u8 bool)
             },
         }
         return size;
@@ -163,9 +169,8 @@ pub const Packet = struct {
         writer.writeInt(u64, self.checksum);
         writer.writeInt(u32, self.packet_length);
         writer.writeInt(u32, self.packet_id);
-        writer.writeInt(u32, self.session_id);
-        writer.writeInt(u64, self.correlation_id);
         writer.writeInt(i64, self.timestamp);
+        // writer.writeBytes(&self.auth_token);
         try Packet.serializeOperation(writer, self.op);
         return writer.buffer[0..writer.pos];
     }
@@ -175,17 +180,15 @@ pub const Packet = struct {
         const checksum = try Packet.readBytes(data, &offset, u64);
         const packet_length = try Packet.readBytes(data, &offset, u32);
         const packet_id = try Packet.readBytes(data, &offset, u32);
-        const session_id = try Packet.readBytes(data, &offset, u32);
-        const correlation_id = try Packet.readBytes(data, &offset, u64);
         const timestamp = try Packet.readBytes(data, &offset, i64);
+        // const auth_token = try Packet.readBytes(data, &offset, [32]u8);
         const op = try Packet.deserializeOperation(allocator, data, &offset);
         return Packet{
             .checksum = checksum,
             .packet_length = packet_length,
             .packet_id = packet_id,
-            .session_id = session_id,
-            .correlation_id = correlation_id,
             .timestamp = timestamp,
+            // .auth_token = auth_token,
             .op = op,
         };
     }
@@ -196,11 +199,11 @@ pub const Packet = struct {
             .Create, .Drop, .List => {},
             .Insert, .Read, .Update, .Delete => {},
             .Range, .Query, .Aggregate, .Scan => {},
-            .Authenticate, .AuthenticateApiKey, .Logout => {},
+            .Authenticate, .ShipWal, .Logout => {},
             .ResetPassword => {},
             .Restore, .CleanBackups => {},
             .Reply, .Flush, .Shutdown => {},
-            .Stats, .Collect => {},
+            .Stats, .Collect, .Vlogs, .SetMode => {},
             // BatchInsert and BatchReply have arrays that need freeing
             .BatchInsert => |data| {
                 allocator.free(data.values);
@@ -387,8 +390,13 @@ pub const Packet = struct {
                 writer.writeString(data.username);
                 writer.writeString(data.password);
             },
-            .AuthenticateApiKey => |data| {
-                writer.writeString(data.api_key);
+            // ========== REPLICATION OPERATIONS ==========
+            .ShipWal => |data| {
+                writer.writeInt(u8, data.op_kind);
+                writer.writeString(data.store_ns);
+                writer.writeInt(u128, data.doc_id);
+                writer.writeInt(i64, data.timestamp);
+                writer.writeString(data.data);
             },
             .Logout => {},
             // ========== USER MANAGEMENT OPERATIONS ==========
@@ -428,12 +436,16 @@ pub const Packet = struct {
             },
             .Flush => {},
             .Shutdown => {},
+            .Vlogs => {},
             // ========== ADMIN OPERATIONS ==========
             .Stats => |data| {
                 writer.writeInt(u8, @intFromEnum(data.stat));
             },
             .Collect => |data| {
                 writer.writeInt(u8, data.vlog);
+            },
+            .SetMode => |data| {
+                writer.writeInt(u8, if (data.online) 1 else 0);
             },
         }
     }
@@ -713,12 +725,24 @@ pub const Packet = struct {
                     .password = password,
                 } };
             },
-            // Tag 112: AuthenticateApiKey
-            112 => {
-                const api_key = try Packet.readString(allocator, data, offset);
 
-                return Operation{ .AuthenticateApiKey = .{
-                    .api_key = api_key,
+            // Tag 112: ShipWal (server-to-server replication)
+            112 => {
+                const op_kind = try Packet.readBytes(data, offset, u8);
+                const store_ns = try Packet.readString(allocator, data, offset);
+                const lsn = try Packet.readBytes(data, offset, u64);
+
+                const doc_id = try Packet.readBytes(data, offset, u128);
+                const timestamp = try Packet.readBytes(data, offset, i64);
+                const wal_data = try Packet.readString(allocator, data, offset);
+
+                return Operation{ .ShipWal = .{
+                    .op_kind = op_kind,
+                    .store_ns = store_ns,
+                    .lsn = lsn,
+                    .doc_id = doc_id,
+                    .timestamp = timestamp,
+                    .data = wal_data,
                 } };
             },
             // Tag 113: Logout
@@ -817,6 +841,11 @@ pub const Packet = struct {
                 const vlog = try Packet.readBytes(data, offset, u8);
                 return Operation{ .Collect = .{ .vlog = vlog } };
             },
+            124 => return Operation.Vlogs,
+            125 => {
+                const online = (try Packet.readBytes(data, offset, u8)) == 1;
+                return Operation{ .SetMode = .{ .online = online } };
+            },
             else => SerializationError.InvalidData,
         };
     }
@@ -870,25 +899,6 @@ pub const Packet = struct {
     }
 };
 
-pub fn generateCorrelationId(session_id: u32) u64 {
-    const posix = std.posix;
-    const ts = posix.clock_gettime(posix.CLOCK.REALTIME) catch {
-        return @as(u64, session_id);
-    };
-    const seconds: i64 = @intCast(ts.sec);
-    const nanos: i64 = @intCast(ts.nsec);
-    const ms_timestamp: u32 = @intCast((seconds * 1000 + @divTrunc(nanos, 1_000_000)) & 0xFFFFFFFF);
-    return (@as(u64, ms_timestamp) << 32) | @as(u64, session_id);
-}
-
-pub fn extractTimestamp(correlation_id: u64) i64 {
-    return correlation_id >> 32;
-}
-
-pub fn extractSessionId(correlation_id: u64) u32 {
-    return @intCast(@as(u64, @bitCast(correlation_id)) & 0xFFFFFFFF);
-}
-
 pub const BufferWriter = struct {
     buffer: []u8,
     pos: usize = 0,
@@ -937,24 +947,14 @@ const expect = testing.expect;
 const expectEqual = testing.expectEqual;
 const expectEqualStrings = testing.expectEqualStrings;
 
-test "correlation id" {
-    const session_id = 42;
-    const correlation_id = generateCorrelationId(session_id);
-    std.debug.print("\nCor ID: {}\n", .{correlation_id});
-    const extractedsessid = extractSessionId(correlation_id);
-    std.debug.print("\nExtracted Session ID: {}\n", .{extractedsessid});
-    // try expectEqual(correlation_id, 178956970);
-}
-
 test "serialize and deserialize basic message with Flush op" {
     const allocator = testing.allocator;
     const original = Packet{
         .checksum = 12345,
         .packet_length = 100,
         .packet_id = 1,
-        .session_id = 42,
-        .correlation_id = 999,
         .timestamp = 1234567890,
+        .auth_token = [_]u8{0} ** 32,
         .op = Operation.Flush,
     };
     var bw = try BufferWriter.init(allocator);
@@ -965,67 +965,9 @@ test "serialize and deserialize basic message with Flush op" {
     try expectEqual(original.checksum, deserialized.checksum);
     try expectEqual(original.packet_length, deserialized.packet_length);
     try expectEqual(original.packet_id, deserialized.packet_id);
-    try expectEqual(original.session_id, deserialized.session_id);
-    try expectEqual(original.correlation_id, deserialized.correlation_id);
     try expectEqual(original.timestamp, deserialized.timestamp);
+    try expectEqual(original.auth_token, deserialized.auth_token);
     try expectEqual(@intFromEnum(original.op), @intFromEnum(deserialized.op));
-}
-
-test "serialize and deserialize Get operation with attributes" {
-    const allocator = testing.allocator;
-    var attrs = [_]Attribute{
-        Attribute{ .U32 = .{ .name = "id", .value = 123 } },
-        Attribute{ .I64 = .{ .name = "timestamp", .value = -456 } },
-        Attribute{ .F64 = .{ .name = "price", .value = 99.99 } },
-        Attribute{ .Pointer = .{ .name = "data", .value = "hello world" } },
-    };
-    const original = Packet{
-        .checksum = 54321,
-        .packet_length = 200,
-        .packet_id = 2,
-        .session_id = 84,
-        .correlation_id = 1998,
-        .timestamp = 9876543210,
-        .op = Operation{ .Get = .{ .ns = "test_namespace", .attributes = &attrs } },
-    };
-    var bw = try BufferWriter.init(allocator);
-    defer bw.deinit(allocator);
-    const serialized = try original.serialize(&bw);
-    const deserialized = try Packet.deserialize(allocator, serialized);
-    defer Packet.free(allocator, deserialized);
-    try expectEqual(original.checksum, deserialized.checksum);
-    try expectEqualStrings(original.op.Get.ns, deserialized.op.Get.ns);
-    try expectEqual(original.op.Get.attributes.len, deserialized.op.Get.attributes.len);
-    try expectEqual(@intFromEnum(original.op.Get.attributes[0]), @intFromEnum(deserialized.op.Get.attributes[0]));
-    try expectEqualStrings(original.op.Get.attributes[0].U32.name, deserialized.op.Get.attributes[0].U32.name);
-    try expectEqual(original.op.Get.attributes[0].U32.value, deserialized.op.Get.attributes[0].U32.value);
-    try expectEqualStrings(original.op.Get.attributes[1].I64.name, deserialized.op.Get.attributes[1].I64.name);
-    try expectEqual(original.op.Get.attributes[1].I64.value, deserialized.op.Get.attributes[1].I64.value);
-    try expectEqualStrings(original.op.Get.attributes[2].F64.name, deserialized.op.Get.attributes[2].F64.name);
-    try expectEqual(original.op.Get.attributes[2].F64.value, deserialized.op.Get.attributes[2].F64.value);
-    try expectEqualStrings(original.op.Get.attributes[3].Pointer.name, deserialized.op.Get.attributes[3].Pointer.name);
-    try expectEqualStrings(original.op.Get.attributes[3].Pointer.value, deserialized.op.Get.attributes[3].Pointer.value);
-}
-
-test "serialize and deserialize Post operation" {
-    const allocator = testing.allocator;
-    const original = Packet{
-        .checksum = 11111,
-        .packet_length = 150,
-        .packet_id = 3,
-        .session_id = 21,
-        .correlation_id = 5555,
-        .timestamp = 1111111111,
-        .op = Operation{ .Post = .{ .store_ns = "my.store", .ns = "documents", .value = "document content here" } },
-    };
-    var bw = try BufferWriter.init(allocator);
-    defer bw.deinit(allocator);
-    const serialized = try original.serialize(&bw);
-    const deserialized = try Packet.deserialize(allocator, serialized);
-    defer Packet.free(allocator, deserialized);
-    try expectEqualStrings(original.op.Post.store_ns, deserialized.op.Post.store_ns);
-    try expectEqualStrings(original.op.Post.ns, deserialized.op.Post.ns);
-    try expectEqualStrings(original.op.Post.value, deserialized.op.Post.value);
 }
 
 test "serialize and deserialize Reply operation with data" {
@@ -1034,9 +976,8 @@ test "serialize and deserialize Reply operation with data" {
         .checksum = 22222,
         .packet_length = 75,
         .packet_id = 4,
-        .session_id = 63,
-        .correlation_id = 7777,
         .timestamp = 2222222222,
+        .auth_token = [_]u8{0xAB} ** 32,
         .op = Operation{ .Reply = .{ .status = Status.ok, .data = "response data" } },
     };
     var bw = try BufferWriter.init(allocator);
@@ -1045,6 +986,7 @@ test "serialize and deserialize Reply operation with data" {
     const deserialized = try Packet.deserialize(allocator, serialized);
     defer Packet.free(allocator, deserialized);
     try expectEqual(original.op.Reply.status, deserialized.op.Reply.status);
+    try expectEqual(original.auth_token, deserialized.auth_token);
     try expect(deserialized.op.Reply.data != null);
     try expectEqualStrings(original.op.Reply.data.?, deserialized.op.Reply.data.?);
 }
@@ -1055,9 +997,8 @@ test "serialize and deserialize Reply operation without data" {
         .checksum = 33333,
         .packet_length = 50,
         .packet_id = 5,
-        .session_id = 105,
-        .correlation_id = 8888,
         .timestamp = 3333333333,
+        .auth_token = [_]u8{0} ** 32,
         .op = Operation{ .Reply = .{ .status = Status.not_found, .data = null } },
     };
     var bw = try BufferWriter.init(allocator);
@@ -1069,138 +1010,6 @@ test "serialize and deserialize Reply operation without data" {
     try expect(deserialized.op.Reply.data == null);
 }
 
-test "serialize and deserialize Put operation" {
-    const allocator = testing.allocator;
-    var attrs = [_]Attribute{
-        Attribute{ .U8 = .{ .name = "version", .value = 1 } },
-        Attribute{ .I128 = .{ .name = "big_number", .value = 123456789012345678901234567890 } },
-    };
-
-    const original = Packet{
-        .checksum = 44444,
-        .packet_length = 300,
-        .packet_id = 6,
-        .session_id = 147,
-        .correlation_id = 9999,
-        .timestamp = 4444444444,
-        .op = Operation{ .Put = .{ .ns = "storage", .value = "updated content", .attributes = &attrs } },
-    };
-    var bw = try BufferWriter.init(allocator);
-    defer bw.deinit(allocator);
-    const serialized = try original.serialize(&bw);
-    const deserialized = try Packet.deserialize(allocator, serialized);
-    defer Packet.free(allocator, deserialized);
-    try expectEqualStrings(original.op.Put.ns, deserialized.op.Put.ns);
-    try expectEqualStrings(original.op.Put.value, deserialized.op.Put.value);
-    try expectEqual(original.op.Put.attributes.len, deserialized.op.Put.attributes.len);
-    try expectEqualStrings(original.op.Put.attributes[0].U8.name, deserialized.op.Put.attributes[0].U8.name);
-    try expectEqual(original.op.Put.attributes[0].U8.value, deserialized.op.Put.attributes[0].U8.value);
-    try expectEqualStrings(original.op.Put.attributes[1].I128.name, deserialized.op.Put.attributes[1].I128.name);
-    try expectEqual(original.op.Put.attributes[1].I128.value, deserialized.op.Put.attributes[1].I128.value);
-}
-
-test "serialize and deserialize Del operation" {
-    const allocator = testing.allocator;
-    var attrs = [_]Attribute{
-        Attribute{ .F32 = .{ .name = "threshold", .value = 0.5 } },
-    };
-    const original = Packet{
-        .checksum = 55555,
-        .packet_length = 80,
-        .packet_id = 7,
-        .session_id = 189,
-        .correlation_id = 1111,
-        .timestamp = 5555555555,
-        .op = Operation{ .Del = .{ .ns = "cache", .attributes = &attrs } },
-    };
-    var bw = try BufferWriter.init(allocator);
-    defer bw.deinit(allocator);
-    const serialized = try original.serialize(&bw);
-    const deserialized = try Packet.deserialize(allocator, serialized);
-    defer Packet.free(allocator, deserialized);
-    try expectEqualStrings(original.op.Del.ns, deserialized.op.Del.ns);
-    try expectEqual(original.op.Del.attributes.len, deserialized.op.Del.attributes.len);
-    try expectEqualStrings(original.op.Del.attributes[0].F32.name, deserialized.op.Del.attributes[0].F32.name);
-    try expectEqual(original.op.Del.attributes[0].F32.value, deserialized.op.Del.attributes[0].F32.value);
-}
-
-test "serialize and deserialize all attribute types" {
-    const allocator = testing.allocator;
-    var attrs = [_]Attribute{
-        Attribute{ .I8 = .{ .name = "i8_val", .value = -127 } },
-        Attribute{ .I16 = .{ .name = "i16_val", .value = -32767 } },
-        Attribute{ .I32 = .{ .name = "i32_val", .value = -2147483647 } },
-        Attribute{ .I64 = .{ .name = "i64_val", .value = -9223372036854775807 } },
-        Attribute{ .U8 = .{ .name = "u8_val", .value = 255 } },
-        Attribute{ .U16 = .{ .name = "u16_val", .value = 65535 } },
-        Attribute{ .U32 = .{ .name = "u32_val", .value = 4294967295 } },
-        Attribute{ .U64 = .{ .name = "u64_val", .value = 18446744073709551615 } },
-        Attribute{ .F32 = .{ .name = "f32_val", .value = 3.14159 } },
-        Attribute{ .F64 = .{ .name = "f64_val", .value = 2.718281828459045 } },
-    };
-    const original = Packet{
-        .checksum = 66666,
-        .packet_length = 500,
-        .packet_id = 8,
-        .session_id = 231,
-        .correlation_id = 2222,
-        .timestamp = 6666666666,
-        .op = Operation{ .Get = .{ .ns = "all_types_test", .attributes = &attrs } },
-    };
-    var bw = try BufferWriter.init(allocator);
-    defer bw.deinit(allocator);
-    const serialized = try original.serialize(&bw);
-    const deserialized = try Packet.deserialize(allocator, serialized);
-    defer Packet.free(allocator, deserialized);
-    try expectEqual(attrs.len, deserialized.op.Get.attributes.len);
-    for (attrs, deserialized.op.Get.attributes) |orig_attr, deser_attr| {
-        try expectEqual(@intFromEnum(orig_attr), @intFromEnum(deser_attr));
-        switch (orig_attr) {
-            .I8 => |data| {
-                try expectEqualStrings(data.name, deser_attr.I8.name);
-                try expectEqual(data.value, deser_attr.I8.value);
-            },
-            .I16 => |data| {
-                try expectEqualStrings(data.name, deser_attr.I16.name);
-                try expectEqual(data.value, deser_attr.I16.value);
-            },
-            .I32 => |data| {
-                try expectEqualStrings(data.name, deser_attr.I32.name);
-                try expectEqual(data.value, deser_attr.I32.value);
-            },
-            .I64 => |data| {
-                try expectEqualStrings(data.name, deser_attr.I64.name);
-                try expectEqual(data.value, deser_attr.I64.value);
-            },
-            .U8 => |data| {
-                try expectEqualStrings(data.name, deser_attr.U8.name);
-                try expectEqual(data.value, deser_attr.U8.value);
-            },
-            .U16 => |data| {
-                try expectEqualStrings(data.name, deser_attr.U16.name);
-                try expectEqual(data.value, deser_attr.U16.value);
-            },
-            .U32 => |data| {
-                try expectEqualStrings(data.name, deser_attr.U32.name);
-                try expectEqual(data.value, deser_attr.U32.value);
-            },
-            .U64 => |data| {
-                try expectEqualStrings(data.name, deser_attr.U64.name);
-                try expectEqual(data.value, deser_attr.U64.value);
-            },
-            .F32 => |data| {
-                try expectEqualStrings(data.name, deser_attr.F32.name);
-                try expectEqual(data.value, deser_attr.F32.value);
-            },
-            .F64 => |data| {
-                try expectEqualStrings(data.name, deser_attr.F64.name);
-                try expectEqual(data.value, deser_attr.F64.value);
-            },
-            else => {},
-        }
-    }
-}
-
 test "serialize and deserialize all status types" {
     const allocator = testing.allocator;
     const statuses = [_]Status{ .ok, .err, .not_found, .invalid_request, .server_error };
@@ -1209,9 +1018,8 @@ test "serialize and deserialize all status types" {
             .checksum = 77777,
             .packet_length = 25,
             .packet_id = 9,
-            .session_id = 273,
-            .correlation_id = 3333,
             .timestamp = 7777777777,
+            .auth_token = [_]u8{0} ** 32,
             .op = Operation{ .Reply = .{ .status = status, .data = null } },
         };
         var bw = try BufferWriter.init(allocator);
@@ -1229,8 +1037,9 @@ test "error handling for invalid data" {
     try testing.expectError(SerializationError.InvalidData, Packet.deserialize(allocator, &empty_data));
     const partial_data = [_]u8{ 1, 2, 3, 4 };
     try testing.expectError(SerializationError.InvalidData, Packet.deserialize(allocator, &partial_data));
-    var invalid_op_data = [_]u8{0} ** 48;
-    invalid_op_data[47] = 255;
+    // Header is 56 bytes; op_tag at offset 56; 255 is an invalid op tag.
+    var invalid_op_data = [_]u8{0} ** 57;
+    invalid_op_data[56] = 255;
     try testing.expectError(SerializationError.InvalidData, Packet.deserialize(allocator, &invalid_op_data));
 }
 

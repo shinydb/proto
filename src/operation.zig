@@ -144,7 +144,7 @@ pub const OperationTag = enum(u8) {
     Logout = 113,
     ResetPassword = 114,
     Restore = 115,
-    CleanBackups = 116,
+    Backup = 116,
     Reply = 117,
     BatchReply = 118,
     Flush = 119,
@@ -271,11 +271,9 @@ pub const Operation = union(OperationTag) {
     },
 
     // Tag 116: Cleanup old backups
-    CleanBackups: struct {
-        backup_dir: []const u8,
-        keep_count: u32,
+    Backup:  struct {
+        path: []const u8,
     },
-
     // ========== SERVER CONTROL OPERATIONS ==========
     // Tag 117: Reply from server
     Reply: struct {
@@ -360,6 +358,8 @@ pub const Index = struct {
     unique: bool = true,
     description: ?[]const u8 = null,
     created_at: i64 = 0,
+    /// Filesystem path to this secondary index file.
+    index_path: []const u8 = "",
 };
 
 pub const StoreInfo = struct {

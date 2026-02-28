@@ -117,6 +117,7 @@ pub const Packet = struct {
             .ShipWal => |data| {
                 size += 1; // op_kind (u8)
                 size += 4 + @as(u32, @intCast(data.store_ns.len)); // store_ns string
+                size += 8; // lsn (u64)
                 size += 16; // doc_id (u128)
                 size += 8; // timestamp (i64)
                 size += 4 + @as(u32, @intCast(data.data.len)); // data bytes
@@ -201,7 +202,7 @@ pub const Packet = struct {
             .Range, .Query, .Aggregate, .Scan => {},
             .Authenticate, .ShipWal, .Logout => {},
             .ResetPassword => {},
-            .Restore, .CleanBackups => {},
+            .Restore, .Backup => {},
             .Reply, .Flush, .Shutdown => {},
             .Stats, .Collect, .Vlogs, .SetMode => {},
             // BatchInsert and BatchReply have arrays that need freeing
@@ -394,6 +395,7 @@ pub const Packet = struct {
             .ShipWal => |data| {
                 writer.writeInt(u8, data.op_kind);
                 writer.writeString(data.store_ns);
+                writer.writeInt(u64, data.lsn);
                 writer.writeInt(u128, data.doc_id);
                 writer.writeInt(i64, data.timestamp);
                 writer.writeString(data.data);
@@ -410,9 +412,8 @@ pub const Packet = struct {
                 writer.writeString(data.backup_path);
                 writer.writeString(data.target_path);
             },
-            .CleanBackups => |data| {
-                writer.writeString(data.backup_dir);
-                writer.writeInt(u32, data.keep_count);
+            .Backup => |data| {
+                writer.writeString(data.path);
             },
             // ========== SERVER CONTROL OPERATIONS ==========
             .Reply => |data| {
@@ -769,14 +770,11 @@ pub const Packet = struct {
                     .target_path = target_path,
                 } };
             },
-            // Tag 116: CleanBackups
+            // Tag 116: Backup
             116 => {
-                const backup_dir = try Packet.readString(allocator, data, offset);
-                const keep_count = try Packet.readBytes(data, offset, u32);
-
-                return Operation{ .CleanBackups = .{
-                    .backup_dir = backup_dir,
-                    .keep_count = keep_count,
+                const path = try Packet.readString(allocator, data, offset);
+                return Operation{ .Backup = .{
+                    .path = path,
                 } };
             },
             // Tag 117: Reply

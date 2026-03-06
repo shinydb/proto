@@ -167,11 +167,11 @@ pub const Packet = struct {
     }
 
     pub fn serialize(self: Packet, writer: *BufferWriter) ![]u8 {
-        writer.writeInt(u64, self.checksum);
-        writer.writeInt(u32, self.packet_length);
-        writer.writeInt(u32, self.packet_id);
-        writer.writeInt(i64, self.timestamp);
-        // writer.writeBytes(&self.auth_token);
+        try writer.writeInt(u64, self.checksum);
+        try writer.writeInt(u32, self.packet_length);
+        try writer.writeInt(u32, self.packet_id);
+        try writer.writeInt(i64, self.timestamp);
+        // try writer.writeBytes(&self.auth_token);
         try Packet.serializeOperation(writer, self.op);
         return writer.buffer[0..writer.pos];
     }
@@ -220,219 +220,219 @@ pub const Packet = struct {
 
     fn serializeAttribute(writer: *BufferWriter, attr: Attribute) !void {
         const tag = @intFromEnum(attr);
-        writer.writeInt(u8, tag);
+        try writer.writeInt(u8, tag);
         switch (attr) {
             .I8 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i8, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(i8, data.value);
             },
             .I16 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i16, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(i16, data.value);
             },
             .I32 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i32, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(i32, data.value);
             },
             .I64 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i64, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(i64, data.value);
             },
             .I128 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i128, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(i128, data.value);
             },
             .U8 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(u8, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(u8, data.value);
             },
             .U16 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(u16, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(u16, data.value);
             },
             .U32 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(u32, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(u32, data.value);
             },
             .U64 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(u64, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(u64, data.value);
             },
             .U128 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(u128, data.value);
+                try writer.writeString(data.name);
+                try writer.writeInt(u128, data.value);
             },
             .F32 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i32, @bitCast(data.value));
+                try writer.writeString(data.name);
+                try writer.writeInt(i32, @bitCast(data.value));
             },
             .F64 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i64, @bitCast(data.value));
+                try writer.writeString(data.name);
+                try writer.writeInt(i64, @bitCast(data.value));
             },
             .F128 => |data| {
-                writer.writeString(data.name);
-                writer.writeInt(i128, @bitCast(data.value));
+                try writer.writeString(data.name);
+                try writer.writeInt(i128, @bitCast(data.value));
             },
             .Pointer => |data| {
-                writer.writeString(data.name);
-                writer.writeString(data.value);
+                try writer.writeString(data.name);
+                try writer.writeString(data.value);
             },
         }
     }
 
     fn serializeOperation(writer: *BufferWriter, op: Operation) !void {
         const tag = @intFromEnum(op);
-        writer.writeInt(u8, tag);
+        try writer.writeInt(u8, tag);
         switch (op) {
             // ========== SCHEMA/METADATA OPERATIONS ==========
             .Create => |data| {
-                writer.writeInt(u8, @intFromEnum(data.doc_type));
-                writer.writeString(data.ns);
-                writer.writeString(data.payload);
-                writer.writeInt(u8, if (data.auto_create) 1 else 0);
+                try writer.writeInt(u8, @intFromEnum(data.doc_type));
+                try writer.writeString(data.ns);
+                try writer.writeString(data.payload);
+                try writer.writeInt(u8, if (data.auto_create) 1 else 0);
                 if (data.metadata) |meta| {
-                    writer.writeInt(u8, 1);
-                    writer.writeString(meta);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeString(meta);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
             },
             .Drop => |data| {
-                writer.writeInt(u8, @intFromEnum(data.doc_type));
-                writer.writeString(data.name);
+                try writer.writeInt(u8, @intFromEnum(data.doc_type));
+                try writer.writeString(data.name);
             },
             .List => |data| {
-                writer.writeInt(u8, @intFromEnum(data.doc_type));
+                try writer.writeInt(u8, @intFromEnum(data.doc_type));
                 if (data.ns) |ns| {
-                    writer.writeInt(u8, 1);
-                    writer.writeString(ns);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeString(ns);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
                 if (data.limit) |lim| {
-                    writer.writeInt(u8, 1);
-                    writer.writeInt(u32, lim);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeInt(u32, lim);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
                 if (data.offset) |off| {
-                    writer.writeInt(u8, 1);
-                    writer.writeInt(u32, off);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeInt(u32, off);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
             },
             // ========== DOCUMENT DATA OPERATIONS ==========
             .Insert => |data| {
-                writer.writeString(data.store_ns);
-                writer.writeString(data.payload);
-                writer.writeInt(u8, if (data.auto_create) 1 else 0);
+                try writer.writeString(data.store_ns);
+                try writer.writeString(data.payload);
+                try writer.writeInt(u8, if (data.auto_create) 1 else 0);
             },
             .BatchInsert => |data| {
-                writer.writeString(data.store_ns);
+                try writer.writeString(data.store_ns);
                 const count = @as(u32, @intCast(data.values.len));
-                writer.writeInt(u32, count);
+                try writer.writeInt(u32, count);
                 for (data.values) |value| {
-                    writer.writeString(value);
+                    try writer.writeString(value);
                 }
             },
             .Read => |data| {
-                writer.writeString(data.store_ns);
-                writer.writeInt(u128, data.id);
+                try writer.writeString(data.store_ns);
+                try writer.writeInt(u128, data.id);
             },
             .Update => |data| {
-                writer.writeString(data.store_ns);
-                writer.writeInt(u128, data.id);
-                writer.writeString(data.payload);
+                try writer.writeString(data.store_ns);
+                try writer.writeInt(u128, data.id);
+                try writer.writeString(data.payload);
             },
             .Delete => |data| {
-                writer.writeString(data.store_ns);
+                try writer.writeString(data.store_ns);
                 if (data.id) |id| {
-                    writer.writeInt(u8, 1);
-                    writer.writeInt(u128, id);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeInt(u128, id);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
                 if (data.query_json) |qj| {
-                    writer.writeInt(u8, 1);
-                    writer.writeString(qj);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeString(qj);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
             },
             // ========== QUERY OPERATIONS ==========
             .Range => |data| {
-                writer.writeString(data.store_ns);
+                try writer.writeString(data.store_ns);
                 try serializeAttribute(writer, data.start_key);
                 try serializeAttribute(writer, data.end_key);
             },
             .Query => |data| {
-                writer.writeString(data.store_ns);
-                writer.writeString(data.query_json);
+                try writer.writeString(data.store_ns);
+                try writer.writeString(data.query_json);
             },
             .Aggregate => |data| {
-                writer.writeString(data.store_ns);
-                writer.writeString(data.aggregate_json);
+                try writer.writeString(data.store_ns);
+                try writer.writeString(data.aggregate_json);
             },
             .Scan => |data| {
-                writer.writeString(data.store_ns);
+                try writer.writeString(data.store_ns);
                 if (data.start_key) |key| {
-                    writer.writeInt(u8, 1);
-                    writer.writeInt(u128, key);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeInt(u128, key);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
-                writer.writeInt(u32, data.limit);
-                writer.writeInt(u32, data.skip);
+                try writer.writeInt(u32, data.limit);
+                try writer.writeInt(u32, data.skip);
             },
             // ========== AUTHENTICATION OPERATIONS ==========
             .Authenticate => |data| {
-                writer.writeString(data.username);
-                writer.writeString(data.password);
+                try writer.writeString(data.username);
+                try writer.writeString(data.password);
             },
             // ========== REPLICATION OPERATIONS ==========
             .ShipWal => |data| {
-                writer.writeInt(u8, data.op_kind);
-                writer.writeString(data.store_ns);
-                writer.writeInt(u64, data.lsn);
-                writer.writeInt(u128, data.doc_id);
-                writer.writeInt(i64, data.timestamp);
-                writer.writeString(data.data);
+                try writer.writeInt(u8, data.op_kind);
+                try writer.writeString(data.store_ns);
+                try writer.writeInt(u64, data.lsn);
+                try writer.writeInt(u128, data.doc_id);
+                try writer.writeInt(i64, data.timestamp);
+                try writer.writeString(data.data);
             },
             .Logout => {},
             // ========== USER MANAGEMENT OPERATIONS ==========
             .ResetPassword => |data| {
-                writer.writeString(data.username);
-                writer.writeString(data.old_password);
-                writer.writeString(data.new_password);
+                try writer.writeString(data.username);
+                try writer.writeString(data.old_password);
+                try writer.writeString(data.new_password);
             },
             // ========== BACKUP OPERATIONS ==========
             .Restore => |data| {
-                writer.writeString(data.backup_path);
-                writer.writeString(data.target_path);
+                try writer.writeString(data.backup_path);
+                try writer.writeString(data.target_path);
             },
             .Backup => |data| {
-                writer.writeString(data.path);
+                try writer.writeString(data.path);
             },
             // ========== SERVER CONTROL OPERATIONS ==========
             .Reply => |data| {
                 const status_byte = @intFromEnum(data.status);
-                writer.writeInt(u8, status_byte);
+                try writer.writeInt(u8, status_byte);
                 if (data.data) |d| {
-                    writer.writeInt(u8, 1);
-                    writer.writeString(d);
+                    try writer.writeInt(u8, 1);
+                    try writer.writeString(d);
                 } else {
-                    writer.writeInt(u8, 0);
+                    try writer.writeInt(u8, 0);
                 }
             },
             .BatchReply => |data| {
                 const status_byte = @intFromEnum(data.status);
-                writer.writeInt(u8, status_byte);
+                try writer.writeInt(u8, status_byte);
                 const count = @as(u32, @intCast(data.results.len));
-                writer.writeInt(u32, count);
+                try writer.writeInt(u32, count);
                 for (data.results) |result| {
-                    writer.writeString(result);
+                    try writer.writeString(result);
                 }
             },
             .Flush => {},
@@ -440,13 +440,13 @@ pub const Packet = struct {
             .Vlogs => {},
             // ========== ADMIN OPERATIONS ==========
             .Stats => |data| {
-                writer.writeInt(u8, @intFromEnum(data.stat));
+                try writer.writeInt(u8, @intFromEnum(data.stat));
             },
             .Collect => |data| {
-                writer.writeInt(u8, data.vlog);
+                try writer.writeInt(u8, data.vlog);
             },
             .SetMode => |data| {
-                writer.writeInt(u8, if (data.online) 1 else 0);
+                try writer.writeInt(u8, if (data.online) 1 else 0);
             },
         }
     }
@@ -900,35 +900,61 @@ pub const Packet = struct {
 pub const BufferWriter = struct {
     buffer: []u8,
     pos: usize = 0,
+    allocator: Allocator,
+
+    const initial_size = 1048576; // 1 MB
 
     pub fn init(allocator: Allocator) !BufferWriter {
         return BufferWriter{
-            .buffer = try allocator.alloc(u8, 1048576),
+            .buffer = try allocator.alloc(u8, initial_size),
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *BufferWriter, allocator: Allocator) void {
-        allocator.free(self.buffer);
+        _ = allocator;
+        self.allocator.free(self.buffer);
     }
 
     pub fn reset(self: *BufferWriter) void {
-        // @memset(self.buffer, 0);
         self.pos = 0;
+        // Free and re-allocate at initial size if buffer grew large
+        if (self.buffer.len > initial_size) {
+            self.allocator.free(self.buffer);
+            self.buffer = self.allocator.alloc(u8, initial_size) catch {
+                // If alloc fails, we're in trouble - but this shouldn't happen for 1MB
+                self.buffer = &.{};
+                return;
+            };
+        }
     }
 
-    inline fn writeBytes(self: *BufferWriter, data: []const u8) void {
+    fn ensureCapacity(self: *BufferWriter, needed: usize) !void {
+        const required = self.pos + needed;
+        if (required <= self.buffer.len) return;
+        var new_size = self.buffer.len;
+        while (new_size < required) {
+            new_size *= 2;
+        }
+        self.buffer = try self.allocator.realloc(self.buffer, new_size);
+    }
+
+    inline fn writeBytes(self: *BufferWriter, data: []const u8) !void {
+        try self.ensureCapacity(data.len);
         @memcpy(self.buffer[self.pos .. self.pos + data.len], data);
         self.pos += data.len;
     }
 
-    inline fn writeInt(self: *BufferWriter, comptime T: type, value: T) void {
+    inline fn writeInt(self: *BufferWriter, comptime T: type, value: T) !void {
         const bytes = std.mem.asBytes(&value);
+        try self.ensureCapacity(bytes.len);
         @memcpy(self.buffer[self.pos .. self.pos + bytes.len], bytes);
         self.pos += bytes.len;
     }
 
-    inline fn writeString(self: *BufferWriter, str: []const u8) void {
-        self.writeInt(u32, @intCast(str.len));
+    inline fn writeString(self: *BufferWriter, str: []const u8) !void {
+        try self.writeInt(u32, @intCast(str.len));
+        try self.ensureCapacity(str.len);
         @memcpy(self.buffer[self.pos .. self.pos + str.len], str);
         self.pos += str.len;
     }

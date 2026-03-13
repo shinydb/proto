@@ -17,12 +17,15 @@ pub const ValueType = enum {
     Pointer,
 };
 
-pub const Status = enum {
-    ok,
-    err,
-    not_found,
-    invalid_request,
-    server_error,
+pub const Status = enum(u8) {
+    ok = 0,
+    err = 1,
+    not_found = 2,
+    invalid_request = 3,
+    server_error = 4,
+    no_index_on_field = 5,
+    document_too_large = 6,
+    not_leader = 7,
 
     pub fn toString(self: Status) []const u8 {
         return switch (self) {
@@ -31,7 +34,119 @@ pub const Status = enum {
             .not_found => "Resource not found",
             .invalid_request => "Invalid request format",
             .server_error => "Internal server error",
+            .no_index_on_field => "No index on field",
+            .document_too_large => "Document exceeds size limit",
+            .not_leader => "Not the leader node",
         };
+    }
+};
+
+/// Standard error codes for structured error responses.
+/// Sent inside the Reply data payload as JSON: {"code":1001,"error":"store_not_found","message":"..."}
+pub const ErrorCode = enum(u16) {
+    // 1000-1099: Success / informational
+    success = 1000,
+
+    // 1100-1199: Not found errors
+    not_found = 1100,
+    store_not_found = 1101,
+    space_not_found = 1102,
+    user_not_found = 1103,
+    index_not_found = 1104,
+    key_not_found = 1105,
+
+    // 1200-1299: Authentication / authorization errors
+    unauthorized = 1200,
+    invalid_credentials = 1201,
+    session_expired = 1202,
+    permission_denied = 1203,
+    account_locked = 1204,
+    user_disabled = 1205,
+    user_already_exists = 1206,
+
+    // 1300-1399: Validation / request errors
+    invalid_request = 1300,
+    invalid_namespace = 1301,
+    invalid_query = 1302,
+    key_too_large = 1303,
+    document_too_large = 1304,
+    batch_too_large = 1305,
+    no_index_on_field = 1306,
+    invalid_field_type = 1307,
+    missing_required_field = 1308,
+    duplicate_index = 1309,
+
+    // 1400-1499: Server state errors
+    server_offline = 1400,
+    not_leader = 1401,
+    read_only = 1402,
+    store_already_exists = 1403,
+
+    // 1500-1599: Internal server errors
+    internal_error = 1500,
+    io_error = 1501,
+    wal_error = 1502,
+    replication_error = 1503,
+
+    pub fn toName(self: ErrorCode) []const u8 {
+        return switch (self) {
+            .success => "success",
+            .not_found => "not_found",
+            .store_not_found => "store_not_found",
+            .space_not_found => "space_not_found",
+            .user_not_found => "user_not_found",
+            .index_not_found => "index_not_found",
+            .key_not_found => "key_not_found",
+            .unauthorized => "unauthorized",
+            .invalid_credentials => "invalid_credentials",
+            .session_expired => "session_expired",
+            .permission_denied => "permission_denied",
+            .account_locked => "account_locked",
+            .user_disabled => "user_disabled",
+            .user_already_exists => "user_already_exists",
+            .invalid_request => "invalid_request",
+            .invalid_namespace => "invalid_namespace",
+            .invalid_query => "invalid_query",
+            .key_too_large => "key_too_large",
+            .document_too_large => "document_too_large",
+            .batch_too_large => "batch_too_large",
+            .no_index_on_field => "no_index_on_field",
+            .invalid_field_type => "invalid_field_type",
+            .missing_required_field => "missing_required_field",
+            .duplicate_index => "duplicate_index",
+            .server_offline => "server_offline",
+            .not_leader => "not_leader",
+            .read_only => "read_only",
+            .store_already_exists => "store_already_exists",
+            .internal_error => "internal_error",
+            .io_error => "io_error",
+            .wal_error => "wal_error",
+            .replication_error => "replication_error",
+        };
+    }
+
+    pub fn toStatus(self: ErrorCode) Status {
+        return switch (self) {
+            .success => .ok,
+            .not_found, .store_not_found, .space_not_found, .user_not_found, .index_not_found, .key_not_found => .not_found,
+            .unauthorized, .invalid_credentials, .session_expired, .permission_denied, .account_locked, .user_disabled, .user_already_exists => .err,
+            .invalid_request, .invalid_namespace, .invalid_query, .key_too_large, .missing_required_field, .invalid_field_type, .duplicate_index => .invalid_request,
+            .document_too_large, .batch_too_large => .document_too_large,
+            .no_index_on_field => .no_index_on_field,
+            .server_offline, .read_only, .store_already_exists => .invalid_request,
+            .not_leader => .not_leader,
+            .internal_error, .io_error, .wal_error, .replication_error => .server_error,
+        };
+    }
+
+    /// Formats a structured JSON error string: {"code":1101,"error":"store_not_found","message":"..."}
+    pub fn formatError(self: ErrorCode, allocator: std.mem.Allocator, message: []const u8) ![]u8 {
+        var buf: std.ArrayList(u8) = .empty;
+        errdefer buf.deinit(allocator);
+        try buf.print(allocator,
+            \\{{"code":{d},"error":"{s}","message":"{s}"}}
+        , .{ @intFromEnum(self), self.toName(), message });
+        return try buf.toOwnedSlice(allocator);
     }
 };
 
@@ -93,7 +208,7 @@ pub const Attribute = union(enum) {
         value: []const u8,
     },
 
-    pub fn calcAttributeSize(attr: *Attribute) usize {
+    pub fn calcAttributeSize(attr: *const Attribute) usize {
         var size: usize = 1; // type tag
 
         switch (attr.*) {
@@ -123,6 +238,7 @@ pub const StatsTag = enum(u8) {
     IndexStats = 3,
     VLogStats = 4,
     GcStats = 5,
+    HistoryStats = 6,
     AllStats = 255,
 };
 
@@ -142,7 +258,7 @@ pub const OperationTag = enum(u8) {
     Authenticate = 111,
     ShipWal = 112,
     Logout = 113,
-    ResetPassword = 114,
+    RegenerateKey = 114,
     Restore = 115,
     Backup = 116,
     Reply = 117,
@@ -154,6 +270,9 @@ pub const OperationTag = enum(u8) {
     Collect = 123,
     Vlogs = 124,
     SetMode = 125,
+    UpdateUser = 126,
+    GetConfig = 127,
+    SetConfig = 128,
 };
 
 pub const Operation = union(OperationTag) {
@@ -236,10 +355,10 @@ pub const Operation = union(OperationTag) {
     },
 
     // ========== AUTHENTICATION OPERATIONS ==========
-    // Tag 111: Authenticate with username/password
+    // Tag 111: Authenticate with uid/key
     Authenticate: struct {
-        username: []const u8,
-        password: []const u8,
+        uid: []const u8,
+        key: []const u8,
     },
 
     // Tag 112: Ship WAL record to sibling (server-to-server replication only)
@@ -256,11 +375,9 @@ pub const Operation = union(OperationTag) {
     Logout: void,
 
     // ========== USER MANAGEMENT OPERATIONS ==========
-    // Tag 114: Reset password
-    ResetPassword: struct {
-        username: []const u8,
-        old_password: []const u8,
-        new_password: []const u8,
+    // Tag 114: Regenerate key for a user
+    RegenerateKey: struct {
+        uid: []const u8,
     },
 
     // ========== BACKUP OPERATIONS ==========
@@ -303,12 +420,27 @@ pub const Operation = union(OperationTag) {
 
     Stats: struct { stat: StatsTag },
 
-    Collect: struct { vlog: u8 },
+    Collect: struct { vlogs: []const u8 },
     Vlogs: void,
 
     // Tag 125: Set server operation mode (admin only)
     SetMode: struct {
         online: bool, // true = online (normal), false = offline (admin-only)
+    },
+
+    // Tag 126: Update user role
+    UpdateUser: struct {
+        uid: []const u8,
+        role: u8,
+    },
+
+    // ========== CONFIGURATION OPERATIONS ==========
+    // Tag 127: Get server configuration
+    GetConfig: void,
+
+    // Tag 128: Set server configuration
+    SetConfig: struct {
+        data: []const u8, // YAML configuration string
     },
 };
 
@@ -426,7 +558,8 @@ pub fn parseNamespace(allocator: std.mem.Allocator, ns: []const u8) !NamespacePa
             1 => parts.store = part_copy,
             2 => parts.index = part_copy,
             else => {
-                // Too many parts - cleanup and return error
+                // Too many parts - free this part and cleanup
+                allocator.free(part_copy);
                 parts.deinit(allocator);
                 return error.InvalidNamespace;
             },
@@ -449,4 +582,124 @@ pub fn validateNamespace(ns: []const u8, expected_type: DocType) !void {
         .User => if (part_count != 1) return error.InvalidUserNamespace,
         .Backup => if (part_count != 1) return error.InvalidBackupNamespace,
     }
+}
+
+// ========== Tests ==========
+
+const testing = std.testing;
+
+test "parseNamespace - single part (space)" {
+    const allocator = testing.allocator;
+    var parts = try parseNamespace(allocator, "myspace");
+    defer parts.deinit(allocator);
+    try testing.expectEqualStrings("myspace", parts.space.?);
+    try testing.expect(parts.store == null);
+    try testing.expect(parts.index == null);
+}
+
+test "parseNamespace - two parts (space.store)" {
+    const allocator = testing.allocator;
+    var parts = try parseNamespace(allocator, "myspace.orders");
+    defer parts.deinit(allocator);
+    try testing.expectEqualStrings("myspace", parts.space.?);
+    try testing.expectEqualStrings("orders", parts.store.?);
+    try testing.expect(parts.index == null);
+}
+
+test "parseNamespace - three parts (space.store.index)" {
+    const allocator = testing.allocator;
+    var parts = try parseNamespace(allocator, "myspace.orders.user_id_idx");
+    defer parts.deinit(allocator);
+    try testing.expectEqualStrings("myspace", parts.space.?);
+    try testing.expectEqualStrings("orders", parts.store.?);
+    try testing.expectEqualStrings("user_id_idx", parts.index.?);
+}
+
+test "parseNamespace - too many parts returns error" {
+    const allocator = testing.allocator;
+    try testing.expectError(error.InvalidNamespace, parseNamespace(allocator, "a.b.c.d"));
+}
+
+test "validateNamespace - correct part counts" {
+    try validateNamespace("myspace", .Space);
+    try validateNamespace("myspace.orders", .Store);
+    try validateNamespace("myspace.orders.idx", .Index);
+    try validateNamespace("myspace.orders", .Document);
+    try validateNamespace("admin", .User);
+    try validateNamespace("snap1", .Backup);
+}
+
+test "validateNamespace - wrong part counts" {
+    try testing.expectError(error.InvalidSpaceNamespace, validateNamespace("a.b", .Space));
+    try testing.expectError(error.InvalidStoreNamespace, validateNamespace("a", .Store));
+    try testing.expectError(error.InvalidStoreNamespace, validateNamespace("a.b.c", .Store));
+    try testing.expectError(error.InvalidIndexNamespace, validateNamespace("a.b", .Index));
+    try testing.expectError(error.InvalidDocumentNamespace, validateNamespace("a", .Document));
+    try testing.expectError(error.InvalidUserNamespace, validateNamespace("a.b", .User));
+    try testing.expectError(error.InvalidBackupNamespace, validateNamespace("a.b", .Backup));
+}
+
+test "ValueType has all expected variants" {
+    try testing.expectEqual(@as(usize, 14), @typeInfo(ValueType).@"enum".fields.len);
+}
+
+test "OperationTag wire values" {
+    try testing.expectEqual(@as(u8, 100), @intFromEnum(OperationTag.Create));
+    try testing.expectEqual(@as(u8, 103), @intFromEnum(OperationTag.Insert));
+    try testing.expectEqual(@as(u8, 109), @intFromEnum(OperationTag.Query));
+    try testing.expectEqual(@as(u8, 117), @intFromEnum(OperationTag.Reply));
+    try testing.expectEqual(@as(u8, 125), @intFromEnum(OperationTag.SetMode));
+}
+
+test "Status toString" {
+    try testing.expectEqualStrings("Success", Status.ok.toString());
+    try testing.expectEqualStrings("Resource not found", Status.not_found.toString());
+    try testing.expectEqualStrings("Internal server error", Status.server_error.toString());
+}
+
+test "ErrorCode toName" {
+    try testing.expectEqualStrings("success", ErrorCode.success.toName());
+    try testing.expectEqualStrings("store_not_found", ErrorCode.store_not_found.toName());
+    try testing.expectEqualStrings("invalid_credentials", ErrorCode.invalid_credentials.toName());
+    try testing.expectEqualStrings("batch_too_large", ErrorCode.batch_too_large.toName());
+    try testing.expectEqualStrings("not_leader", ErrorCode.not_leader.toName());
+    try testing.expectEqualStrings("internal_error", ErrorCode.internal_error.toName());
+}
+
+test "ErrorCode toStatus mapping" {
+    try testing.expectEqual(Status.ok, ErrorCode.success.toStatus());
+    try testing.expectEqual(Status.not_found, ErrorCode.store_not_found.toStatus());
+    try testing.expectEqual(Status.not_found, ErrorCode.key_not_found.toStatus());
+    try testing.expectEqual(Status.invalid_request, ErrorCode.invalid_request.toStatus());
+    try testing.expectEqual(Status.document_too_large, ErrorCode.document_too_large.toStatus());
+    try testing.expectEqual(Status.no_index_on_field, ErrorCode.no_index_on_field.toStatus());
+    try testing.expectEqual(Status.not_leader, ErrorCode.not_leader.toStatus());
+    try testing.expectEqual(Status.server_error, ErrorCode.internal_error.toStatus());
+    try testing.expectEqual(Status.err, ErrorCode.invalid_credentials.toStatus());
+}
+
+test "ErrorCode numeric values" {
+    try testing.expectEqual(@as(u16, 1000), @intFromEnum(ErrorCode.success));
+    try testing.expectEqual(@as(u16, 1101), @intFromEnum(ErrorCode.store_not_found));
+    try testing.expectEqual(@as(u16, 1201), @intFromEnum(ErrorCode.invalid_credentials));
+    try testing.expectEqual(@as(u16, 1304), @intFromEnum(ErrorCode.document_too_large));
+    try testing.expectEqual(@as(u16, 1401), @intFromEnum(ErrorCode.not_leader));
+    try testing.expectEqual(@as(u16, 1500), @intFromEnum(ErrorCode.internal_error));
+}
+
+test "ErrorCode formatError" {
+    const allocator = testing.allocator;
+    const json = try ErrorCode.store_not_found.formatError(allocator, "store 'mydb' does not exist");
+    defer allocator.free(json);
+    try testing.expectEqualStrings(
+        \\{"code":1101,"error":"store_not_found","message":"store 'mydb' does not exist"}
+    , json);
+}
+
+test "Attribute calcAttributeSize" {
+    const attr_i8 = Attribute{ .I8 = .{ .name = "age", .value = 25 } };
+    try testing.expectEqual(@as(usize, 1 + 4 + 3 + 1), attr_i8.calcAttributeSize()); // tag + len + "age" + i8
+
+    const attr_ptr = Attribute{ .Pointer = .{ .name = "name", .value = "hello" } };
+    try testing.expectEqual(@as(usize, 1 + 4 + 4 + 4 + 5), attr_ptr.calcAttributeSize()); // tag + len + "name" + len + "hello"
 }

@@ -1,8 +1,8 @@
 pub const Operation = @import("operation.zig").Operation;
 pub const Attribute = @import("operation.zig").Attribute;
-pub const Batch = @import("operation.zig").Batch;
 pub const Space = @import("operation.zig").Space;
 pub const Status = @import("operation.zig").Status;
+pub const ErrorCode = @import("operation.zig").ErrorCode;
 pub const Store = @import("operation.zig").Store;
 pub const StoreInfo = @import("operation.zig").StoreInfo;
 pub const Index = @import("operation.zig").Index;
@@ -15,8 +15,9 @@ pub const ValueType = @import("operation.zig").ValueType;
 pub const parseNamespace = @import("operation.zig").parseNamespace;
 pub const NamespaceParts = @import("operation.zig").NamespaceParts;
 pub const Packet = @import("packet.zig").Packet;
-pub const extractSessionId = @import("packet.zig").extractSessionId;
-pub const extractTimestamp = @import("packet.zig").extractTimestamp;
-pub const generateCorrelationId = @import("packet.zig").generateCorrelationId;
-pub const BufferWriter = @import("packet.zig").BufferWriter;
 pub const SerializationError = @import("packet.zig").SerializationError;
+
+test {
+    _ = @import("packet.zig");
+    _ = @import("operation.zig");
+}

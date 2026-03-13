@@ -4,21 +4,26 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const utils_dep = b.dependency("utils", .{ .target = target, .optimize = optimize });
+    const utils_mod = utils_dep.module("utils");
+
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
+    lib_mod.addImport("utils", utils_mod);
 
     const lib = b.addLibrary(.{
         .linkage = .static,
-        .name = "yad_proto",
+        .name = "proto",
         .root_module = lib_mod,
     });
 
     b.installArtifact(lib);
 
-    // Export module for other packages to use
+    // Export module for other packages to use.
+    // Consumers must add the "utils" import themselves to avoid diamond dependency.
     _ = b.addModule("proto", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,

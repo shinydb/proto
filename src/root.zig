@@ -1,9 +1,11 @@
 pub const Operation = @import("operation.zig").Operation;
 pub const Attribute = @import("operation.zig").Attribute;
 pub const Space = @import("operation.zig").Space;
+pub const SpaceStatus = @import("operation.zig").SpaceStatus;
 pub const Status = @import("operation.zig").Status;
 pub const ErrorCode = @import("operation.zig").ErrorCode;
 pub const Store = @import("operation.zig").Store;
+pub const StoreStatus = @import("operation.zig").StoreStatus;
 pub const StoreInfo = @import("operation.zig").StoreInfo;
 pub const Index = @import("operation.zig").Index;
 pub const User = @import("operation.zig").User;

@@ -81,7 +81,8 @@ pub const ErrorCode = enum(u16) {
     not_leader = 1401,
     read_only = 1402,
     store_already_exists = 1403,
-
+    space_delete_in_progress = 1404,
+    store_delete_in_progress = 1405,
     // 1500-1599: Internal server errors
     internal_error = 1500,
     io_error = 1501,
@@ -118,6 +119,8 @@ pub const ErrorCode = enum(u16) {
             .not_leader => "not_leader",
             .read_only => "read_only",
             .store_already_exists => "store_already_exists",
+            .space_delete_in_progress => "space_delete_in_progress",
+            .store_delete_in_progress => "store_delete_in_progress",
             .internal_error => "internal_error",
             .io_error => "io_error",
             .wal_error => "wal_error",
@@ -133,7 +136,7 @@ pub const ErrorCode = enum(u16) {
             .invalid_request, .invalid_namespace, .invalid_query, .key_too_large, .missing_required_field, .invalid_field_type, .duplicate_index => .invalid_request,
             .document_too_large, .batch_too_large => .document_too_large,
             .no_index_on_field => .no_index_on_field,
-            .server_offline, .read_only, .store_already_exists => .invalid_request,
+            .server_offline, .read_only, .store_already_exists, .space_delete_in_progress, .store_delete_in_progress => .invalid_request,
             .not_leader => .not_leader,
             .internal_error, .io_error, .wal_error, .replication_error => .server_error,
         };
@@ -442,6 +445,7 @@ pub const Operation = union(OperationTag) {
     SetConfig: struct {
         data: []const u8, // YAML configuration string
     },
+
 };
 
 // Metadata
@@ -466,11 +470,22 @@ pub const FieldType = enum(u8) {
     Boolean = 8,
 };
 
+pub const SpaceStatus = enum(u8) {
+    active = 0,
+    deleting = 1,
+};
+
+pub const StoreStatus = enum(u8) {
+    active = 0,
+    deleting = 1,
+};
+
 pub const Space = struct {
     id: u16,
     ns: []const u8,
     description: ?[]const u8 = null,
     created_at: i64 = 0,
+    status: SpaceStatus = .active,
 };
 
 pub const Store = struct {
@@ -479,6 +494,7 @@ pub const Store = struct {
     ns: []const u8,
     description: ?[]const u8 = null,
     created_at: i64 = 0,
+    status: StoreStatus = .active,
 };
 
 pub const Index = struct {

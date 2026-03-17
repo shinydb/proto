@@ -276,6 +276,8 @@ pub const OperationTag = enum(u8) {
     UpdateUser = 126,
     GetConfig = 127,
     SetConfig = 128,
+    Export = 129,
+    Import = 130,
 };
 
 pub const Operation = union(OperationTag) {
@@ -446,6 +448,19 @@ pub const Operation = union(OperationTag) {
         data: []const u8, // YAML configuration string
     },
 
+    // ========== EXPORT/IMPORT OPERATIONS ==========
+    // Tag 129: Export store data to file (runs async in storage layer)
+    Export: struct {
+        store_ns: []const u8, // "space.store"
+        format: []const u8, // "json", "csv", "bson"
+        file_path: []const u8, // destination file path
+    },
+
+    // Tag 130: Import data into store from file (runs async in storage layer)
+    Import: struct {
+        payload: []const u8, // BSON-encoded import spec (yaml config as bson)
+    },
+
 };
 
 // Metadata
@@ -457,6 +472,7 @@ pub const DocType = enum(u8) {
     Document = 4,
     User = 5,
     Backup = 6,
+    Schedule = 7,
 };
 
 pub const FieldType = enum(u8) {
@@ -538,6 +554,19 @@ pub const Backup = struct {
     description: ?[]const u8 = null,
 };
 
+pub const Schedule = struct {
+    name: []const u8,
+    task_type: []const u8,
+    cron_expr: []const u8,
+    enabled: bool,
+    backup_path: []const u8 = "",
+    description: ?[]const u8 = null,
+    created_at: i64 = 0,
+    updated_at: i64 = 0,
+    last_run_at: i64 = 0,
+    next_run_at: i64 = 0,
+};
+
 // ========== NAMESPACE UTILITIES ==========
 
 pub const NamespaceParts = struct {
@@ -597,6 +626,7 @@ pub fn validateNamespace(ns: []const u8, expected_type: DocType) !void {
         .Document => if (part_count != 2) return error.InvalidDocumentNamespace,
         .User => if (part_count != 1) return error.InvalidUserNamespace,
         .Backup => if (part_count != 1) return error.InvalidBackupNamespace,
+        .Schedule => if (part_count != 1) return error.InvalidScheduleNamespace,
     }
 }
 

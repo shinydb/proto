@@ -10,6 +10,7 @@ pub const StoreInfo = @import("operation.zig").StoreInfo;
 pub const Index = @import("operation.zig").Index;
 pub const User = @import("operation.zig").User;
 pub const Backup = @import("operation.zig").Backup;
+pub const Schedule = @import("operation.zig").Schedule;
 pub const DocType = @import("operation.zig").DocType;
 pub const StatsTag = @import("operation.zig").StatsTag;
 pub const FieldType = @import("operation.zig").FieldType;

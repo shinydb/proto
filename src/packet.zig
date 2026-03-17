@@ -168,6 +168,14 @@ pub const Packet = struct {
             .SetConfig => |data| {
                 size += 4 + @as(u32, @intCast(data.data.len)); // data string
             },
+            .Export => |data| {
+                size += 4 + @as(u32, @intCast(data.store_ns.len));
+                size += 4 + @as(u32, @intCast(data.format.len));
+                size += 4 + @as(u32, @intCast(data.file_path.len));
+            },
+            .Import => |data| {
+                size += 4 + @as(u32, @intCast(data.payload.len));
+            },
         }
         return size;
     }
@@ -209,6 +217,7 @@ pub const Packet = struct {
             .Authenticate, .ShipWal, .Logout => {},
             .RegenerateKey, .UpdateUser, .GetConfig, .SetConfig => {},
             .Restore, .Backup => {},
+            .Export, .Import => {},
             .Reply, .Flush, .Shutdown => {},
             .Stats, .Vlogs, .SetMode => {},
             .Collect => |data| {
@@ -463,6 +472,14 @@ pub const Packet = struct {
             .GetConfig => {},
             .SetConfig => |data| {
                 try w.writeString(data.data);
+            },
+            .Export => |data| {
+                try w.writeString(data.store_ns);
+                try w.writeString(data.format);
+                try w.writeString(data.file_path);
+            },
+            .Import => |data| {
+                try w.writeString(data.payload);
             },
         }
     }
@@ -872,6 +889,18 @@ pub const Packet = struct {
             128 => {
                 const config_data = try Packet.readString(allocator, data, offset);
                 return Operation{ .SetConfig = .{ .data = config_data } };
+            },
+            // Tag 129: Export
+            129 => {
+                const store_ns = try Packet.readString(allocator, data, offset);
+                const format = try Packet.readString(allocator, data, offset);
+                const file_path = try Packet.readString(allocator, data, offset);
+                return Operation{ .Export = .{ .store_ns = store_ns, .format = format, .file_path = file_path } };
+            },
+            // Tag 130: Import
+            130 => {
+                const payload = try Packet.readString(allocator, data, offset);
+                return Operation{ .Import = .{ .payload = payload } };
             },
             else => SerializationError.InvalidData,
         };

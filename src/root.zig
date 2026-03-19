@@ -1,7 +1,6 @@
 pub const Operation = @import("operation.zig").Operation;
+pub const OperationTag = @import("operation.zig").OperationTag;
 pub const Attribute = @import("operation.zig").Attribute;
-pub const Space = @import("operation.zig").Space;
-pub const SpaceStatus = @import("operation.zig").SpaceStatus;
 pub const Status = @import("operation.zig").Status;
 pub const ErrorCode = @import("operation.zig").ErrorCode;
 pub const Store = @import("operation.zig").Store;
@@ -12,7 +11,6 @@ pub const User = @import("operation.zig").User;
 pub const Backup = @import("operation.zig").Backup;
 pub const Schedule = @import("operation.zig").Schedule;
 pub const DocType = @import("operation.zig").DocType;
-pub const StatsTag = @import("operation.zig").StatsTag;
 pub const FieldType = @import("operation.zig").FieldType;
 pub const ValueType = @import("operation.zig").ValueType;
 pub const parseNamespace = @import("operation.zig").parseNamespace;
